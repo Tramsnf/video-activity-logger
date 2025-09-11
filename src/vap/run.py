@@ -7,6 +7,7 @@ from .detect import build_detector
 from .track import build_tracker
 from .states import update_state_machine, close_open_states
 from .io import write_events
+import cv2, numpy as np
 
 def main():
     ap = argparse.ArgumentParser(description="Video Activity Logger")
@@ -17,8 +18,23 @@ def main():
 
     cfg = load_config(args.config)
     tax = load_taxonomy(cfg.taxonomy_path)
+    roi = None
+    try:
+        from .config import load_config
+        cfg = load_config(args.config)
+        if getattr(cfg, "roi_mask_path", None):
+            roi_img = cv2.imread(cfg.roi_mask_path, cv2.IMREAD_GRAYSCALE)
+            roi = (roi_img > 0).astype("uint8") if roi_img is not None else None
+    except Exception:
+        pass
 
     det = build_detector(cfg.detect.backend, cfg.detect.model_path, cfg.detect.classes)
+    # if YOLO, set detector’s filters/roi (quick way without refactor)
+    if hasattr(det, "min_conf"): 
+        det.min_conf = getattr(cfg.detect, "min_conf", 0.4)
+        det.min_box_area = getattr(cfg.detect, "min_box_area", 900)
+        if roi is not None: det.roi = roi
+        
     trk = build_tracker(cfg.track.backend)
 
     actors = {}

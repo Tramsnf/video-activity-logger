@@ -6,5 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "vap"
 version = "0.1.0"
 description = "Video Activity Logger"
-authors = [{name="Your Name"}]
+authors = [{name="Smart idima"}]
 requires-python = ">=3.9"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+[tool.setuptools.packages.find]
+where = ["src"]

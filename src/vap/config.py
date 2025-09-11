@@ -15,11 +15,16 @@ class TrackConfig(BaseModel):
 class Thresholds(BaseModel):
     pixels_per_meter: float = 90.0
     fps_target: int = 30
-    # Speed (m/s)
-    speed_drive: float = 0.2
-    speed_stop: float = 0.05
-    # Debounce (frames)
-    debounce_frames: int = 6  # ~0.2s at 30fps
+    # Forklift
+    fl_speed_drive: float = 0.20   # m/s
+    fl_speed_stop:  float = 0.05
+    # Human
+    hu_speed_walk:  float = 0.50   # m/s  (humans need a higher bar)
+    hu_speed_wait:  float = 0.08
+    # Debounce / durations
+    debounce_frames: int = 6
+    min_state_dur_s: float = 1.0   # don’t emit states shorter than this
+    merge_gap_s:     float = 0.5   # merge states separated by tiny gaps
 
 class PipelineConfig(BaseModel):
     video_id: str = "video_demo"

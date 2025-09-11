@@ -42,9 +42,13 @@ def update_state_machine(actors: Dict[str, ActorState], tracks, frame_idx: int, 
 
         s = smooth_speed(a.speed_hist)
         if a.actor_type == "forklift":
-            target = "DRIVE" if s > speed_drive else "WAIT"
+            drive = s > speed_drive
+            wait  = s <= speed_stop
+            target = "DRIVE" if drive else ("WAIT" if wait else (a.state or "WAIT"))
         else:
-            target = "WALK" if s > speed_drive else "WAIT"
+            walk = s > speed_drive  # Assuming speed_drive is used for humans as well; adjust if needed
+            wait = s <= speed_stop  # Assuming speed_stop is used for humans as well; adjust if needed
+            target = "WALK" if walk else ("WAIT" if wait else (a.state or "WAIT"))
 
         # debounced transitions
         a.pending.append(target)

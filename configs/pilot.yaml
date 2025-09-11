@@ -3,12 +3,9 @@ source_camera: cam3
 taxonomy_path: configs/taxonomy.yaml
 mapping_path: configs/mapping.csv
 detect:
-  backend: mock
-  model_path: null
-  classes:
-  - person
-  - forklift
-  - pallet
+  backend: yolo
+  model_path: yolov8m.pt           # start here; we can fine-tune later
+  classes: [person, forklift, pallet]               # COCO doesn't include 'forklift' or 'pallet' by default
 track:
   backend: bytetrack
   max_age: 30
