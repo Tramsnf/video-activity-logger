@@ -18,15 +18,12 @@ def main():
 
     cfg = load_config(args.config)
     tax = load_taxonomy(cfg.taxonomy_path)
+    # Optional ROI mask: if provided in config, load as binary mask
     roi = None
-    try:
-        from .config import load_config
-        cfg = load_config(args.config)
-        if getattr(cfg, "roi_mask_path", None):
-            roi_img = cv2.imread(cfg.roi_mask_path, cv2.IMREAD_GRAYSCALE)
-            roi = (roi_img > 0).astype("uint8") if roi_img is not None else None
-    except Exception:
-        pass
+    roi_path = getattr(cfg, "roi_mask_path", None)
+    if roi_path:
+        roi_img = cv2.imread(roi_path, cv2.IMREAD_GRAYSCALE)
+        roi = (roi_img > 0).astype("uint8") if roi_img is not None else None
 
     det = build_detector(cfg.detect.backend, cfg.detect.model_path, cfg.detect.classes)
     # if YOLO, set detector’s filters/roi (quick way without refactor)
@@ -47,14 +44,19 @@ def main():
     fps = cap.get(cv2.CAP_PROP_FPS) or cfg.thresholds.fps_target
     cap.release()
 
+    # Resolve thresholds (backward-compatible with old schema)
+    thr = cfg.thresholds
+    speed_drive = getattr(thr, "speed_drive", getattr(thr, "fl_speed_drive", 0.2))
+    speed_stop  = getattr(thr, "speed_stop",  getattr(thr, "fl_speed_stop",  0.05))
+
     for frame_idx, frame in ingest.frames(args.video):
         detections = det(frame)
         tracks = trk.update(detections)
         ev = update_state_machine(
             actors=actors, tracks=tracks, frame_idx=frame_idx, fps=fps,
             pixels_per_meter=cfg.thresholds.pixels_per_meter,
-            speed_drive=cfg.thresholds.speed_drive,
-            speed_stop=cfg.thresholds.speed_stop,
+            speed_drive=speed_drive,
+            speed_stop=speed_stop,
             debounce_frames=cfg.thresholds.debounce_frames,
             source_camera=cfg.source_camera, video_id=cfg.video_id
         )
