@@ -22,9 +22,20 @@ def smooth_speed(hist: List[float], k: int = 5) -> float:
     if len(hist) < k: return float(np.mean(hist))
     return float(np.mean(hist[-k:]))
 
-def update_state_machine(actors: Dict[str, ActorState], tracks, frame_idx: int, fps: float,
-                         pixels_per_meter: float, speed_drive: float, speed_stop: float, debounce_frames: int,
-                         source_camera: str, video_id: str) -> List[Dict[str, Any]]:
+def update_state_machine(
+    actors: Dict[str, ActorState],
+    tracks,
+    frame_idx: int,
+    fps: float,
+    pixels_per_meter: float,
+    fl_speed_drive: float,
+    fl_speed_stop: float,
+    hu_speed_walk: float,
+    hu_speed_wait: float,
+    debounce_frames: int,
+    source_camera: str,
+    video_id: str,
+) -> List[Dict[str, Any]]:
     events = []
     for trk in tracks:
         tid = f"{trk.cls_name}_{trk.track_id}"
@@ -42,12 +53,12 @@ def update_state_machine(actors: Dict[str, ActorState], tracks, frame_idx: int, 
 
         s = smooth_speed(a.speed_hist)
         if a.actor_type == "forklift":
-            drive = s > speed_drive
-            wait  = s <= speed_stop
+            drive = s > fl_speed_drive
+            wait  = s <= fl_speed_stop
             target = "DRIVE" if drive else ("WAIT" if wait else (a.state or "WAIT"))
         else:
-            walk = s > speed_drive  # Assuming speed_drive is used for humans as well; adjust if needed
-            wait = s <= speed_stop  # Assuming speed_stop is used for humans as well; adjust if needed
+            walk = s > hu_speed_walk
+            wait = s <= hu_speed_wait
             target = "WALK" if walk else ("WAIT" if wait else (a.state or "WAIT"))
 
         # debounced transitions
@@ -90,3 +101,54 @@ def close_open_states(actors: Dict[str, ActorState], last_frame: int, fps: float
                 "attributes": {}
             })
     return events
+
+def postprocess_state_events(
+    events: List[Dict[str, Any]],
+    taxonomy,
+    min_state_dur_s: float,
+    merge_gap_s: float,
+) -> List[Dict[str, Any]]:
+    """Merge tiny gaps of identical states and drop too-short state intervals.
+    Non-state events are preserved.
+    """
+    if not events:
+        return events
+
+    # Group by actor and sort by start time
+    by_actor: Dict[str, List[Dict[str, Any]]] = {}
+    for e in events:
+        aid = e.get("actor_id", "")
+        by_actor.setdefault(aid, []).append(e)
+    for aid in by_actor:
+        by_actor[aid].sort(key=lambda x: (x.get("start_time_s", 0.0), x.get("end_time_s", 0.0)))
+
+    merged_total: List[Dict[str, Any]] = []
+    state_names = getattr(taxonomy, "states", set())
+
+    for aid, evs in by_actor.items():
+        # First pass: merge consecutive same-activity with small gaps
+        merged: List[Dict[str, Any]] = []
+        for e in evs:
+            if e.get("activity") in state_names and merged and merged[-1].get("activity") == e.get("activity"):
+                gap = e.get("start_time_s", 0.0) - merged[-1].get("end_time_s", 0.0)
+                if gap <= merge_gap_s:
+                    # Extend previous
+                    merged[-1]["end_time_s"] = max(merged[-1]["end_time_s"], e.get("end_time_s", merged[-1]["end_time_s"]))
+                    merged[-1]["duration_s"] = merged[-1]["end_time_s"] - merged[-1]["start_time_s"]
+                    continue
+            merged.append(e)
+
+        # Second pass: drop too-short states
+        filtered: List[Dict[str, Any]] = []
+        for e in merged:
+            if e.get("activity") in state_names:
+                dur = float(e.get("duration_s", 0.0))
+                if dur < min_state_dur_s:
+                    # Drop this short state
+                    continue
+            filtered.append(e)
+
+        merged_total.extend(filtered)
+
+    merged_total.sort(key=lambda x: (x.get("start_time_s", 0.0), x.get("end_time_s", 0.0)))
+    return merged_total

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import pandas as pd
 from typing import List, Dict, Any
 
@@ -13,7 +14,15 @@ def write_events_csv(events: List[Dict[str,Any]], out_csv: str):
         evts = []
         for e in events:
             e = dict(e)
-            e["attributes"] = e.get("attributes", {})
+            attrs = e.get("attributes", {})
+            if isinstance(attrs, str):
+                # Assume it's already JSON-like; keep as is
+                e["attributes"] = attrs
+            else:
+                try:
+                    e["attributes"] = json.dumps(attrs, ensure_ascii=False)
+                except Exception:
+                    e["attributes"] = json.dumps({}, ensure_ascii=False)
             evts.append(e)
         df = pd.DataFrame(evts)[COLUMNS]
     df.to_csv(out_csv, index=False)
