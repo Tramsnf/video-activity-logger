@@ -1,0 +1,12 @@
+opencv-python
+numpy
+pandas
+pyyaml
+pydantic>=2
+tqdm
+scipy
+# Detection / tracking (optional until you switch to YOLO)
+ultralytics
+supervision
+# Review UI
+streamlit

@@ -1,0 +1,5 @@
+pixels_per_meter: 90.0
+fps_target: 30
+speed_drive: 0.2
+speed_stop: 0.05
+debounce_frames: 6

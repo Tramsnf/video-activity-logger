@@ -1,0 +1,72 @@
+states:
+- name: DRIVE
+  type: state
+  description: Forklift moving beyond speed threshold
+- name: WAIT
+  type: state
+  description: Stationary or minimal motion; use attributes for reason (sit/talk/office)
+- name: WALK
+  type: state
+  description: Human walking
+- name: BREAK
+  type: state
+  description: Planned break or off-task break
+events:
+- name: CHECK_PAPERWORK
+  type: event
+  description: Review paperwork/documents
+- name: CHECK_SKIDS
+  type: event
+  description: Inspect or count skids
+- name: OPEN_BAY_DOOR
+  type: event
+  description: Open bay/overhead door
+- name: CLOSE_BAY_DOOR
+  type: event
+  description: Close bay/overhead door
+- name: PREP_FORKLIFT_CHECKS
+  type: event
+  description: Forklift pre-op checks / prep
+- name: GRAB_SKID
+  type: event
+  description: Acquire/engage a skid/pallet
+- name: GRAB_RACKS
+  type: event
+  description: Acquire/engage rack(s)
+- name: GRAB_TOTES
+  type: event
+  description: Acquire tote(s)
+- name: PLACE_SKID
+  type: event
+  description: Place/leave a skid
+- name: PLACE_RACKS
+  type: event
+  description: Place rack(s)
+- name: REARRANGE_SKIDS
+  type: event
+  description: Rearrange or reposition skids
+- name: LOAD_SKID_TRAILER
+  type: event
+  description: Load skid onto trailer
+- name: REMOVE_SKID_FROM_STACK
+  type: event
+  description: Remove skid from a stack
+- name: REMOVE_SKID_FROM_TRAILER
+  type: event
+  description: Remove skid from trailer
+- name: REMOVE_RACK_FROM_TRAILER
+  type: event
+  description: Remove rack from trailer
+- name: RESTACK_SKID
+  type: event
+  description: Restack a skid
+markers:
+- name: VIDEO_START
+  type: marker
+  description: Start-of-video marker
+- name: VIDEO_END
+  type: marker
+  description: End-of-video marker
+- name: OCCLUSION
+  type: marker
+  description: Lost line of sight / view obstructed
