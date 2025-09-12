@@ -16,6 +16,33 @@ python -m vap.run --config configs/pilot.yaml --video /path/to/video.mp4 --out o
 streamlit run src/vap/review/app.py
 ```
 
+## New Features (Robust Pipeline)
+- Trackers: configurable `iou` (default), optional `bytetrack` and `ocsort` backends with graceful fallback.
+- Per-actor thresholds: forklift vs human speeds and debounced transitions.
+- State cleanup: merge small gaps and drop too-short intervals.
+- Actions: heuristic GRAB_SKID/PLACE_SKID; configurable distance/frame parameters.
+- Zones: optional polygons (`configs/zones.yaml`) with ZONE_ENTER/ZONE_EXIT events.
+- Batch: `scripts/batch_run.py` to process a directory of videos.
+- Feature export: `scripts/export_features.py` generates per-actor time series for training TCNs.
+- Evaluation: `scripts/eval_events.py` computes event-level F1 and timestamp MAE.
+- Model export/training helpers: `scripts/export_model.py`, `scripts/train_yolo.sh`.
+
+### Config knobs
+- `detect`: `backend`, `model_path`, `classes`, `min_conf`, `min_box_area`, `imgsz`, `batch_size`, `device`, `fp16`
+- `thresholds`: `fl_speed_*`, `hu_speed_*`, `debounce_frames`, `min_state_dur_s`, `merge_gap_s`, action_*
+- Optional: `roi_mask_path`, `zones_path`
+
+### Zones example
+Add to `configs/pilot.yaml`:
+```yaml
+zones_path: configs/zones.yaml
+```
+
+### Training
+- Prepare a YOLO `data.yaml` with `train/val/test` splits and names `[person, forklift, pallet]`.
+- Run: `bash scripts/train_yolo.sh configs/data_forklift.yaml yolov8n.pt 100 forklift-v1`
+- Use the resulting weights in `configs/pilot.yaml` as `detect.model_path`.
+
 > Tip: Start with the mock detector to validate end-to-end flow. Switch to YOLO by editing `configs/pilot.yaml`.
 
 ## Repo layout

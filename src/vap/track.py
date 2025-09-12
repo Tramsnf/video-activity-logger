@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
@@ -81,5 +81,86 @@ class SimpleIOUTracker:
                 del self.tracks[tid]
         return outputs
 
-def build_tracker(backend: str):
-    return SimpleIOUTracker(iou_thresh=0.3, max_age=30)
+class _ByteTrackWrapper:
+    def __init__(self, iou_thresh: float = 0.3, max_age: int = 30):
+        self.fallback = SimpleIOUTracker(iou_thresh=iou_thresh, max_age=max_age)
+        self.use_fallback = True
+        try:
+            from supervision.tracker.byte_tracker import BYTETracker  # type: ignore
+            try:
+                from supervision.detection.core import Detections  # type: ignore
+            except Exception:
+                from supervision import Detections  # type: ignore
+            self._Detections = Detections
+            self.bt = BYTETracker()
+            self.use_fallback = False
+        except Exception:
+            self.bt = None
+
+    def update(self, detections) -> List[Track]:
+        if self.use_fallback or self.bt is None:
+            return self.fallback.update(detections)
+        try:
+            import numpy as np
+            xyxy = np.array([d.xyxy for d in detections], dtype=np.float32) if detections else np.zeros((0, 4), np.float32)
+            conf = np.array([d.conf for d in detections], dtype=np.float32) if detections else np.zeros((0,), np.float32)
+            cls_ids = np.array([0 for _ in detections], dtype=int)
+            dets = self._Detections(xyxy=xyxy, confidence=conf, class_id=cls_ids)
+            tracks = self.bt.update_with_detections(dets)
+            outputs: List[Track] = []
+            for tr in tracks:
+                tid = int(getattr(tr, "id", getattr(tr, "track_id", 0)))
+                box = getattr(tr, "bbox", getattr(tr, "xyxy", None))
+                if box is None:
+                    continue
+                x1, y1, x2, y2 = [float(v) for v in box]
+                outputs.append(Track(track_id=tid, cls_name="object", xyxy=(x1, y1, x2, y2)))
+            if not outputs:
+                return self.fallback.update(detections)
+            return outputs
+        except Exception:
+            self.use_fallback = True
+            return self.fallback.update(detections)
+
+
+class _OCSortWrapper:
+    def __init__(self, iou_thresh: float = 0.3, max_age: int = 30):
+        self.fallback = SimpleIOUTracker(iou_thresh=iou_thresh, max_age=max_age)
+        self.use_fallback = True
+        try:
+            from ocsort.ocsort import OCSort  # type: ignore
+            self.oc = OCSort()
+            self.use_fallback = False
+        except Exception:
+            self.oc = None
+
+    def update(self, detections) -> List[Track]:
+        if self.use_fallback or self.oc is None:
+            return self.fallback.update(detections)
+        try:
+            import numpy as np
+            dets = []
+            for d in detections:
+                x1, y1, x2, y2 = d.xyxy
+                dets.append([x1, y1, x2, y2, d.conf])
+            dets = np.array(dets, dtype=np.float32) if dets else np.zeros((0, 5), np.float32)
+            tracks = self.oc.update(dets)
+            outputs: List[Track] = []
+            for t in tracks:
+                x1, y1, x2, y2, tid = t[:5]
+                outputs.append(Track(track_id=int(tid), cls_name="object", xyxy=(float(x1), float(y1), float(x2), float(y2))))
+            if not outputs:
+                return self.fallback.update(detections)
+            return outputs
+        except Exception:
+            self.use_fallback = True
+            return self.fallback.update(detections)
+
+
+def build_tracker(backend: str, **kwargs: Any):
+    backend = (backend or "iou").lower()
+    if backend == "bytetrack":
+        return _ByteTrackWrapper()
+    if backend == "ocsort":
+        return _OCSortWrapper()
+    return SimpleIOUTracker(iou_thresh=0.3, max_age=kwargs.get("max_age", 30))

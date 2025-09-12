@@ -7,6 +7,12 @@ class DetectConfig(BaseModel):
     backend: str = Field(default="mock", description="mock | yolo")
     model_path: Optional[str] = None
     classes: List[str] = Field(default_factory=lambda: ["person","forklift","pallet"])
+    min_conf: float = 0.4
+    min_box_area: int = 900
+    imgsz: int = 960
+    batch_size: int = 1
+    device: Optional[str] = None
+    fp16: bool = False
 
 class TrackConfig(BaseModel):
     backend: str = Field(default="bytetrack")
@@ -35,6 +41,7 @@ class PipelineConfig(BaseModel):
     video_id: str = "video_demo"
     source_camera: str = "cam1"
     roi_mask_path: Optional[str] = None
+    zones_path: Optional[str] = None
     detect: DetectConfig = DetectConfig()
     track: TrackConfig = TrackConfig()
     thresholds: Thresholds = Thresholds()
