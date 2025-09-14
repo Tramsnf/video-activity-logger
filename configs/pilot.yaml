@@ -12,7 +12,7 @@ detect:
   min_box_area: 900
   imgsz: 960
   batch_size: 1
-  device: 8                      # set to GPU id or 'cpu'
+  #device: 8                      # set to GPU id or 'cpu'
   fp16: true
 track:
   backend: bytetrack
