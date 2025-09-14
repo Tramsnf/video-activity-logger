@@ -2,4 +2,4 @@ path: /abs/path/to/dataset
 train: images/train
 val: images/val
 test: images/test
-names: [person, forklift, pallet]
+names: [person, truck, pallet]

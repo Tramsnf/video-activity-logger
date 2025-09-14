@@ -7,20 +7,20 @@ zones_path: configs/zones.yaml         # optional: zone polygons for zone events
 detect:
   backend: yolo
   model_path: yolov8m.pt           # start here; replace with your fine-tuned weights
-  classes: [person, forklift, pallet]               # COCO doesn't include 'forklift' or 'pallet' by default
-  min_conf: 0.4
+  classes: [person, truck, pallet]               # COCO doesn't include 'truck' or 'pallet' by default
+  min_conf: 0.3
   min_box_area: 900
   imgsz: 960
   batch_size: 1
-  # device: 0                      # set to GPU id or 'cpu'
-  # fp16: true
+  device: 8                      # set to GPU id or 'cpu'
+  fp16: true
 track:
   backend: bytetrack
   max_age: 30
 thresholds:
   pixels_per_meter: 90.0
   fps_target: 30
-  # Forklift thresholds (m/s)
+  # truck thresholds (m/s)
   fl_speed_drive: 0.20
   fl_speed_stop: 0.05
   # Human thresholds (m/s)

@@ -1,7 +1,7 @@
 states:
 - name: DRIVE
   type: state
-  description: Forklift moving beyond speed threshold
+  description: TRUCK moving beyond speed threshold
 - name: WAIT
   type: state
   description: Stationary or minimal motion; use attributes for reason (sit/talk/office)
@@ -24,9 +24,9 @@ events:
 - name: CLOSE_BAY_DOOR
   type: event
   description: Close bay/overhead door
-- name: PREP_FORKLIFT_CHECKS
+- name: PREP_TRUCK_CHECKS
   type: event
-  description: Forklift pre-op checks / prep
+  description: TRUCK pre-op checks / prep
 - name: GRAB_SKID
   type: event
   description: Acquire/engage a skid/pallet

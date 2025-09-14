@@ -19,8 +19,8 @@ class CarryState:
 
 
 class ActionHeuristics:
-    """Simple GRAB_SKID / PLACE_SKID heuristic based on forklift↔pallet proximity
-    and forklift WAIT state around the moment of engagement/release.
+    """Simple GRAB_SKID / PLACE_SKID heuristic based on truck↔pallet proximity
+    and truck WAIT state around the moment of engagement/release.
     """
 
     def __init__(self):
@@ -40,10 +40,10 @@ class ActionHeuristics:
         events: List[Dict[str, Any]] = []
 
         # Build simple lookups
-        forklifts = [t for t in tracks if getattr(t, "cls_name", "") == "forklift"]
+        trucks = [t for t in tracks if getattr(t, "cls_name", "") == "truck"]
         pallets = [t for t in tracks if getattr(t, "cls_name", "") == "pallet"]
 
-        if not forklifts:
+        if not trucks:
             return events
 
         attach_px = float(getattr(thresholds, "action_attach_dist_m", 1.0)) * pixels_per_meter
@@ -51,9 +51,9 @@ class ActionHeuristics:
         attach_frames = int(getattr(thresholds, "action_attach_frames", 5))
         detach_frames = int(getattr(thresholds, "action_detach_frames", 5))
 
-        # For each forklift, check nearest pallet and proximity streaks
-        for fk in forklifts:
-            aid = f"forklift_{fk.track_id}"
+        # For each truck, check nearest pallet and proximity streaks
+        for fk in trucks:
+            aid = f"truck_{fk.track_id}"
             st = self.state.get(aid, CarryState())
 
             # Find nearest pallet
@@ -93,7 +93,7 @@ class ActionHeuristics:
                 events.append({
                     "video_id": video_id,
                     "actor_id": aid,
-                    "actor_type": "forklift",
+                    "actor_type": "truck",
                     "activity": "GRAB_SKID",
                     "start_time_s": frame_idx / fps,
                     "end_time_s": frame_idx / fps,
@@ -109,7 +109,7 @@ class ActionHeuristics:
                 events.append({
                     "video_id": video_id,
                     "actor_id": aid,
-                    "actor_type": "forklift",
+                    "actor_type": "truck",
                     "activity": "PLACE_SKID",
                     "start_time_s": frame_idx / fps,
                     "end_time_s": frame_idx / fps,

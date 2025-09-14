@@ -6,7 +6,7 @@ import yaml, pathlib
 class DetectConfig(BaseModel):
     backend: str = Field(default="mock", description="mock | yolo")
     model_path: Optional[str] = None
-    classes: List[str] = Field(default_factory=lambda: ["person","forklift","pallet"])
+    classes: List[str] = Field(default_factory=lambda: ["person","truck","pallet"])
     min_conf: float = 0.4
     min_box_area: int = 900
     imgsz: int = 960
@@ -21,7 +21,7 @@ class TrackConfig(BaseModel):
 class Thresholds(BaseModel):
     pixels_per_meter: float = 90.0
     fps_target: int = 30
-    # Forklift thresholds (m/s)
+    # truck thresholds (m/s)
     fl_speed_drive: float = 0.20
     fl_speed_stop:  float = 0.05
     # Human thresholds (m/s)
