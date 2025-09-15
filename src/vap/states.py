@@ -40,7 +40,7 @@ def update_state_machine(
     for trk in tracks:
         tid = f"{trk.cls_name}_{trk.track_id}"
         cx, cy = centroid(trk.xyxy)
-        a = actors.get(tid, ActorState(actor_id=tid, actor_type="truck" if trk.cls_name=="truck" else "human", state=None, state_start_f=frame_idx))
+        a = actors.get(tid, ActorState(actor_id=tid, actor_type="forklift" if trk.cls_name in ["forklift", "truck"] else "human", state=None, state_start_f=frame_idx))
 
         # speed calc
         speed_mps = 0.0

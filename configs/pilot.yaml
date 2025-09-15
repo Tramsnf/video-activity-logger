@@ -13,7 +13,7 @@ detect:
   imgsz: 960
   batch_size: 1
   #device: 8                      # set to GPU id or 'cpu'
-  fp16: true
+  # fp16: true
 track:
   backend: bytetrack
   max_age: 30
