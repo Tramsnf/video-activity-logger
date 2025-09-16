@@ -14,6 +14,7 @@ python -m vap.run --config configs/pilot.yaml --video /path/to/video.mp4 --out o
 
 # 3) Launch the Studio UI
 streamlit run src/vap/web/app.py
+# or: python scripts/run_studio.py
 
 # (Optional) Review an events CSV
 streamlit run src/vap/review/app.py
@@ -88,6 +89,11 @@ tests/
 ## Outputs
 Events CSV with columns:
 `video_id, actor_id, actor_type, activity, start_time_s, end_time_s, duration_s, confidence, source_camera, attributes`
+
+## Performance tips
+- Install `av` (`pip install av`) to unlock the PyAV video reader, which is much faster than the OpenCV fallback on longer clips.
+- Keep `detect.batch_size` as high as your GPU/CPU can handle in the Streamlit sidebar to increase throughput.
+- Trim `imgsz` and confidence thresholds for quick experiments, then restore to production values for full-accuracy runs.
 
 ## License
 MIT (adjust as needed).

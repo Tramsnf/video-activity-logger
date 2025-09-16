@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, Optional
 
 import pandas as pd
 import streamlit as st
+
+# Ensure the package root (src/) is importable when running via `streamlit run`
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
 
 from vap.config import load_config, PipelineConfig
 from vap.pipeline import PipelineResult, analyze_video
