@@ -40,7 +40,7 @@ def update_state_machine(
     for trk in tracks:
         tid = f"{trk.cls_name}_{trk.track_id}"
         cx, cy = centroid(trk.xyxy)
-        a = actors.get(tid, ActorState(actor_id=tid, actor_type="forklift" if trk.cls_name in ["forklift", "truck"] else "human", state=None, state_start_f=frame_idx))
+        a = actors.get(tid, ActorState(actor_id=tid, actor_type="truck" if trk.cls_name=="truck" else "human", state=None, state_start_f=frame_idx))
 
         # speed calc
         speed_mps = 0.0
@@ -52,7 +52,8 @@ def update_state_machine(
         a.last_pos = (cx, cy)
 
         s = smooth_speed(a.speed_hist)
-        if a.actor_type == "truck":
+        # Vehicles (truck or forklift) use vehicle thresholds; humans use human thresholds
+        if a.actor_type in ("truck", "forklift"):
             drive = s > fl_speed_drive
             wait  = s <= fl_speed_stop
             target = "DRIVE" if drive else ("WAIT" if wait else (a.state or "WAIT"))
