@@ -19,6 +19,6 @@ if uploaded is not None:
                 pass
             return str(x)
         df["attributes"] = df["attributes"].apply(fmt)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 else:
     st.info("Upload an events CSV to review.")

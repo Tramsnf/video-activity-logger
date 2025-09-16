@@ -19,6 +19,7 @@ from .io import write_events
 
 
 ProgressCallback = Callable[[int, Optional[int]], None]
+FrameCallback = Callable[[int, np.ndarray], None]
 
 
 @dataclass
@@ -89,6 +90,7 @@ def analyze_video(
     detection_overrides: Optional[Dict[str, Any]] = None,
     output_dir: Optional[str | Path] = None,
     progress_callback: Optional[ProgressCallback] = None,
+    frame_callback: Optional[FrameCallback] = None,
     create_annotated_video: bool = False,
     annotation_path: Optional[str | Path] = None,
     max_frames: Optional[int] = None,
@@ -218,11 +220,18 @@ def analyze_video(
                 if ev3:
                     events.extend(ev3)
 
+            annotated_frame: Optional[np.ndarray] = None
+            should_annotate = create_annotated_video or frame_callback is not None
+            if should_annotate:
+                annotated_frame = _draw_annotations(fr, dets, tracks)
+
             if create_annotated_video:
                 _ensure_writer(fr)
-                if video_writer is not None:
-                    annotated = _draw_annotations(fr, dets, tracks)
-                    video_writer.write(annotated)
+                if video_writer is not None and annotated_frame is not None:
+                    video_writer.write(annotated_frame)
+
+            if frame_callback is not None:
+                frame_callback(fi, annotated_frame if annotated_frame is not None else fr)
 
             if progress_callback:
                 progress_callback(fi, total_frames)
@@ -275,11 +284,18 @@ def analyze_video(
                 if ev3:
                     events.extend(ev3)
 
+            annotated_frame = None
+            should_annotate = create_annotated_video or frame_callback is not None
+            if should_annotate:
+                annotated_frame = _draw_annotations(fr, dets, tracks)
+
             if create_annotated_video:
                 _ensure_writer(fr)
-                if video_writer is not None:
-                    annotated = _draw_annotations(fr, dets, tracks)
-                    video_writer.write(annotated)
+                if video_writer is not None and annotated_frame is not None:
+                    video_writer.write(annotated_frame)
+
+            if frame_callback is not None:
+                frame_callback(fi, annotated_frame if annotated_frame is not None else fr)
 
             if progress_callback:
                 progress_callback(fi, total_frames)

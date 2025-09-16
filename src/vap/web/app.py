@@ -67,6 +67,7 @@ def _run_analysis(
     detection_params: Dict[str, object],
     max_frames: Optional[int],
     generate_preview: bool,
+    frame_callback=None,
 ) -> PipelineResult:
     progress_bar = st.progress(0.0, text="Starting analysis…")
 
@@ -87,6 +88,7 @@ def _run_analysis(
         detection_overrides=overrides,
         create_annotated_video=generate_preview,
         progress_callback=_progress_cb,
+        frame_callback=frame_callback,
         max_frames=max_frames if max_frames and max_frames > 0 else None,
     )
     progress_bar.progress(1.0, text="Analysis complete")
@@ -118,6 +120,8 @@ def main() -> None:
         st.header("Runtime")
         preview_frames = st.number_input("Max frames (0 = full video)", min_value=0, value=0, help="Limit processing for quick previews.")
         generate_preview = st.checkbox("Render annotated preview", value=True)
+        live_preview = st.checkbox("Show live preview", value=True)
+        live_stride = st.slider("Live preview stride", 1, 10, value=1, help="Update the live frame every N frames to save resources.")
 
     video_sources = _available_videos()
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "mov", "avi", "mkv"])
@@ -144,10 +148,35 @@ def main() -> None:
 
     run_requested = st.button("Run analysis", type="primary", disabled=video_path is None)
 
+    live_frame_placeholder = st.empty()
+
     if run_requested and video_path:
         with st.spinner("Running pipeline…"):
+            def _live_frame_cb(frame_idx: int, frame):
+                if not live_preview:
+                    return
+                if frame_idx <= 0:
+                    return
+                if live_stride > 1 and frame_idx % live_stride != 0:
+                    return
+                try:
+                    rgb = frame[:, :, ::-1]
+                except Exception:
+                    rgb = frame
+                live_frame_placeholder.image(
+                    rgb,
+                    caption=f"Frame {frame_idx:,}",
+                    width="stretch",
+                )
             try:
-                result = _run_analysis(config, video_path, detection_params, int(preview_frames), generate_preview)
+                result = _run_analysis(
+                    config,
+                    video_path,
+                    detection_params,
+                    int(preview_frames),
+                    generate_preview,
+                    frame_callback=_live_frame_cb,
+                )
             except Exception as exc:
                 st.error(f"Pipeline failed: {exc}")
                 return
@@ -186,7 +215,7 @@ def main() -> None:
 
     st.subheader("Event Log")
     if not df.empty:
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         csv_bytes = df.to_csv(index=False).encode("utf-8")
         st.download_button("Download events CSV", csv_bytes, file_name="events.csv")
     else:
