@@ -11,7 +11,7 @@ supervision
 # Review UI
 streamlit
 # Optional performance/trackers/metrics (uncomment as needed)
-# decord            # faster video decode
+decord            # faster video decode
 # av                # PyAV video decode
 # ocsort            # OC-SORT tracker
 # torchreid         # ReID embeddings

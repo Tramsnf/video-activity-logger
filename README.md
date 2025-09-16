@@ -12,7 +12,10 @@ pip install -r requirements.txt
 # 2) Run pipeline (mock detector by default)
 python -m vap.run --config configs/pilot.yaml --video /path/to/video.mp4 --out outputs
 
-# 3) Review events (Streamlit skeleton)
+# 3) Launch the Studio UI
+streamlit run src/vap/web/app.py
+
+# (Optional) Review an events CSV
 streamlit run src/vap/review/app.py
 ```
 
@@ -59,11 +62,13 @@ src/vap/
   ingest.py             # video reader & fps normalization
   detect.py             # detector interface (mock/yolo)
   track.py              # multi-object tracking wrapper
+  pipeline.py           # reusable pipeline runner & annotation helpers
   states.py             # state machine logic (drive/wait/walk)
   actions.py            # heuristic actions (grab/place/remove/load...)
   events.py             # event dataclasses and writers
   io.py                 # CSV/Parquet writers
   run.py                # CLI entry point
+  web/app.py            # interactive Streamlit studio for running videos
   review/app.py         # Streamlit skeleton to scrub outputs
 tests/
   test_taxonomy.py      # sanity check taxonomy schema

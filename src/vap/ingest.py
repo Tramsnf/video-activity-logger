@@ -1,6 +1,33 @@
 from __future__ import annotations
 from typing import Iterator, Tuple, Optional
 
+
+def frame_count(video_path: str) -> Optional[int]:
+    """Best-effort frame count probe supporting large container formats."""
+    try:
+        import decord  # type: ignore
+        vr = decord.VideoReader(video_path)
+        return int(len(vr))
+    except Exception:
+        pass
+    try:
+        import av  # type: ignore
+        cn = av.open(video_path)
+        for stream in cn.streams.video:
+            if stream.frames:
+                return int(stream.frames)
+        return None
+    except Exception:
+        pass
+    try:
+        import cv2  # type: ignore
+        cap = cv2.VideoCapture(video_path)
+        total = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        cap.release()
+        return int(total) if total and total > 0 else None
+    except Exception:
+        return None
+
 def probe_fps(video_path: str) -> Optional[float]:
     # Try decord
     try:
