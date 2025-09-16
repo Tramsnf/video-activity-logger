@@ -19,7 +19,7 @@ dist/
 .idea/
 
 # Data / outputs
-outputs/
+#outputs/
 *.mp4
 *.avi
 *.mov
