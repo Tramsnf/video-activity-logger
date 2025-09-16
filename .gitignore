@@ -23,6 +23,7 @@ outputs/
 *.mp4
 *.avi
 *.mov
+*.pt
 
 # OS
 .DS_Store
