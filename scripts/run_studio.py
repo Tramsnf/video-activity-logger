@@ -21,7 +21,7 @@ def main() -> None:
 
     # Launch the Streamlit app programmatically so users can simply run
     # `python scripts/run_studio.py`.
-    bootstrap.run(str(app_path), "", [], {})
+    bootstrap.run(str(app_path), False, [], {})
 
 
 if __name__ == "__main__":
