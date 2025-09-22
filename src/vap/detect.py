@@ -19,9 +19,18 @@ class MockDetector:
         return [[] for _ in frames]
 
 class YoloDetector:
-    def __init__(self, model_path: str, classes: List[str], min_conf: float = 0.4,
-                 min_box_area: int = 900, roi_mask=None, imgsz: int = 960, device: Optional[str] = None,
-                 fp16: bool = False):
+    def __init__(
+        self,
+        model_path: str,
+        classes: List[str],
+        min_conf: float = 0.4,
+        min_box_area: int = 900,
+        roi_mask=None,
+        imgsz: int = 960,
+        device: Optional[str] = None,
+        fp16: bool = False,
+        max_det: int = 200,
+    ):
         from ultralytics import YOLO
         self.model = YOLO(model_path)
         self.classes = set(classes)
@@ -33,6 +42,7 @@ class YoloDetector:
         self.imgsz = int(imgsz)
         self.device = device
         self.fp16 = bool(fp16)
+        self.max_det = int(max(1, max_det))
 
     def _filter_one(self, boxes, confs, clses) -> List[Detection]:
         dets: List[Detection] = []
@@ -59,7 +69,15 @@ class YoloDetector:
         if len(frames) == 0:
             return []
         # ultralytics model can accept list of images
-        res_list = self.model(list(frames), imgsz=self.imgsz, conf=self.min_conf, device=self.device, half=self.fp16, verbose=False)
+        res_list = self.model(
+            list(frames),
+            imgsz=self.imgsz,
+            conf=self.min_conf,
+            device=self.device,
+            half=self.fp16,
+            verbose=False,
+            max_det=self.max_det,
+        )
         outputs: List[List[Detection]] = []
         for res in res_list:
             boxes = res.boxes.xyxy.cpu().numpy() if res.boxes is not None else None

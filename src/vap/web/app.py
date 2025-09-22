@@ -96,6 +96,8 @@ def _run_analysis(
 
 
 def main() -> None:
+    st.session_state.setdefault("vap_auto_ready", False)
+
     configs = _available_configs()
     config_names = list(configs.keys())
     if not config_names:
@@ -146,7 +148,32 @@ def main() -> None:
         "device": device.strip() or None,
     }
 
+    control_signature = {
+        "config": config_name,
+        "video": video_path,
+        "detection": detection_params,
+        "preview_frames": int(preview_frames),
+        "generate_preview": bool(generate_preview),
+        "live_preview": bool(live_preview),
+        "live_stride": int(live_stride),
+    }
+
+    prev_signature = st.session_state.get("vap_last_controls")
+    auto_trigger = False
+    if (
+        video_path
+        and prev_signature is not None
+        and prev_signature != control_signature
+        and st.session_state.get("vap_last_video") == video_path
+        and st.session_state.get("vap_auto_ready")
+    ):
+        auto_trigger = True
+
+    st.session_state["vap_last_controls"] = control_signature
+
     run_requested = st.button("Run analysis", type="primary", disabled=video_path is None)
+    if not run_requested and auto_trigger and video_path:
+        run_requested = True
 
     live_frame_placeholder = st.empty()
 
@@ -168,6 +195,8 @@ def main() -> None:
                     caption=f"Frame {frame_idx:,}",
                     width="stretch",
                 )
+            st.session_state["vap_auto_ready"] = True
+            st.session_state["vap_last_video"] = video_path
             try:
                 result = _run_analysis(
                     config,
@@ -179,21 +208,27 @@ def main() -> None:
                 )
             except Exception as exc:
                 st.error(f"Pipeline failed: {exc}")
+                st.session_state["vap_auto_ready"] = False
                 return
         st.session_state["vap_last_result"] = result
         st.session_state["vap_last_events"] = _format_events(result)
-        st.session_state["vap_last_video"] = video_path
 
     if "vap_last_result" not in st.session_state:
-        st.info("Upload or select a video, tweak the detection settings, and press Run analysis.")
+        st.info("Upload or select a video, then press Run analysis once. After the first run, tweaks auto-apply for the same video.")
         return
 
     result: PipelineResult = st.session_state["vap_last_result"]
     df: pd.DataFrame = st.session_state.get("vap_last_events", pd.DataFrame(columns=EVENT_COLUMNS))
 
-    st.success(
-        f"Processed {result.frame_count:,} frames · {len(result.events)} events logged."
-    )
+    total_frames = getattr(result, "total_frames", None)
+    if total_frames:
+        st.success(
+            f"Processed {result.frame_count:,}/{total_frames:,} frames · {len(result.events)} events logged."
+        )
+    else:
+        st.success(
+            f"Processed {result.frame_count:,} frames · {len(result.events)} events logged."
+        )
 
     stats = result.frame_stats
     if stats:
@@ -201,7 +236,10 @@ def main() -> None:
         avg_det = stats_df["num_detections"].mean()
         avg_trk = stats_df["num_tracks"].mean()
         col1, col2, col3 = st.columns(3)
-        col1.metric("Frames processed", f"{result.frame_count:,}")
+        if total_frames:
+            col1.metric("Frames processed", f"{result.frame_count:,}/{total_frames:,}")
+        else:
+            col1.metric("Frames processed", f"{result.frame_count:,}")
         col2.metric("Events", f"{len(result.events):,}")
         col3.metric("Avg det/track", f"{avg_det:.2f} / {avg_trk:.2f}")
         st.subheader("Detection/Tracking Trend")

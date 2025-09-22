@@ -39,6 +39,7 @@ class PipelineResult:
     annotated_video_path: Optional[str]
     fps: float
     frame_count: int
+    total_frames: Optional[int]
     frame_stats: List[FrameStat]
 
 
@@ -263,6 +264,7 @@ def analyze_video(
         imgsz=cfg_local.detect.imgsz,
         device=cfg_local.detect.device,
         fp16=cfg_local.detect.fp16,
+        max_det=cfg_local.detect.max_det,
     )
     if hasattr(det, "min_conf"):
         det.min_conf = cfg_local.detect.min_conf
@@ -536,5 +538,6 @@ def analyze_video(
         annotated_video_path=annotated_path,
         fps=float(fps),
         frame_count=latest_idx,
+        total_frames=total_frames if isinstance(total_frames, int) else None,
         frame_stats=frame_stats,
     )
