@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <git-remote-url> [branch-name]"
-  echo "Example: $0 git@github.com:YOURUSER/video-activity-logger.git main"
+  echo "Example: $0 git@github.com:tramsnf/video-activity-logger.git main"
   exit 1
 fi
 
