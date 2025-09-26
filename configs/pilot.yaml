@@ -6,7 +6,7 @@ mapping_path: configs/mapping.csv
 zones_path: configs/zones.yaml         # optional: zone polygons for zone events
 detect:
   backend: yolo
-  model_path: best.pt           # start here; replace with your fine-tuned weights
+  model_path: best-2.pt           # start here; replace with your fine-tuned weights
   classes: [person, truck, forklift, pallet]               # COCO doesn't include 'truck' or 'pallet' by default
   min_conf: 0.2
   min_box_area: 100
