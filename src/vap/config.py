@@ -14,8 +14,10 @@ class DetectConfig(BaseModel):
     stride: int = Field(default=1, description="Run detector every N frames (1 = every frame)")
     prefetch_frames: int = Field(default=0, description="Number of frames to prefetch asynchronously for the detector")
     device: Optional[str] = Field(default="auto", description="'auto', 'cpu', 'mps', CUDA id, or CSV list")
-    max_det: int = Field(default=200, description="Max detections per frame (helps keep NMS fast)")
+    max_det: int = Field(default=1000, description="Max detections per frame (helps keep NMS fast)")
     fp16: bool = False
+    iou: float = Field(default=0.45, description="NMS IoU threshold")
+    agnostic_nms: bool = Field(default=False, description="Run NMS without class separation")
 
 class TrackConfig(BaseModel):
     backend: str = Field(default="bytetrack")

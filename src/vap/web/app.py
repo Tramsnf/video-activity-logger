@@ -25,13 +25,42 @@ st.title("Video Activity Logger — Live Studio")
 
 def _available_configs() -> Dict[str, Path]:
     configs_dir = Path("configs")
-    return {p.name: p for p in sorted(configs_dir.glob("*.yaml"))}
+    paths = list(configs_dir.glob("*.yaml"))
+    paths.sort(key=lambda p: (0 if p.name == "pilot.yaml" else 1, p.name.lower()))
+    return {p.name: p for p in paths}
 
 
 def _available_videos() -> Dict[str, Path]:
     workspace = Path(".")
     extensions = (".mp4", ".mov", ".avi", ".mkv")
     return {p.name: p for p in sorted(workspace.glob("*")) if p.suffix.lower() in extensions}
+
+
+def _available_models() -> Dict[str, Path]:
+    workspace = Path(".").resolve()
+    seen: Dict[Path, str] = {}
+    candidates: Dict[str, Path] = {}
+    search_roots = [workspace, workspace / "models", workspace / "weights"]
+    patterns = ("*.pt", "*.onnx")
+
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for pattern in patterns:
+            for item in root.glob(pattern):
+                if not item.is_file():
+                    continue
+                resolved = item.resolve()
+                if resolved in seen:
+                    continue
+                try:
+                    label = str(resolved.relative_to(workspace))
+                except ValueError:
+                    label = resolved.name
+                seen[resolved] = label
+                candidates[label] = resolved
+
+    return dict(sorted(candidates.items(), key=lambda kv: kv[0].lower()))
 
 
 def _save_uploaded_file(upload) -> str:
@@ -111,10 +140,53 @@ def main() -> None:
 
         st.header("Detection")
         model_default = config.detect.model_path or ""
-        model_path = st.text_input("Model weights", value=model_default, help="Path to the YOLO model weights to load.")
+        available_models = _available_models()
+        custom_label = "Custom path"
+
+        selected_label = custom_label
+        workspace_root = Path(".").resolve()
+        if model_default:
+            expanded_default = Path(model_default).expanduser()
+            resolved_default = expanded_default.resolve(strict=False)
+            for label, path in available_models.items():
+                if path == resolved_default:
+                    selected_label = label
+                    break
+            else:
+                if expanded_default.is_file():
+                    try:
+                        label = str(resolved_default.relative_to(workspace_root))
+                    except ValueError:
+                        label = str(resolved_default)
+                    available_models[label] = resolved_default
+                    selected_label = label
+        elif available_models:
+            selected_label = next(iter(available_models.keys()))
+
+        model_options = list(available_models.keys())
+        model_options.sort(key=lambda s: s.lower())
+        if selected_label not in model_options and selected_label != custom_label:
+            model_options.append(selected_label)
+        if custom_label not in model_options:
+            model_options.append(custom_label)
+
+        default_index = model_options.index(selected_label) if selected_label in model_options else model_options.index(custom_label)
+        model_choice = st.selectbox("Model weights", model_options, index=default_index if default_index >= 0 else 0)
+
+        if model_choice == custom_label:
+            model_path = st.text_input(
+                "Custom model path",
+                value=model_default,
+                help="Path to the YOLO model weights to load.",
+            )
+        else:
+            model_path = str(available_models[model_choice])
         min_conf = st.slider("Min confidence", 0.01, 1.0, float(config.detect.min_conf), 0.01)
         min_box_area = st.number_input("Min box area", min_value=1, value=int(config.detect.min_box_area), step=10)
         imgsz = st.number_input("Image size", min_value=320, max_value=1920, value=int(config.detect.imgsz), step=32)
+        iou = st.slider("NMS IoU", 0.05, 0.95, float(config.detect.iou), 0.01)
+        agnostic_nms = st.checkbox("Class-agnostic NMS", value=bool(config.detect.agnostic_nms))
+        max_det = st.number_input("Max detections", min_value=1, value=int(config.detect.max_det), step=50)
         batch_size = st.slider("Batch size", 1, 16, int(config.detect.batch_size or 1))
         fp16 = st.checkbox("Enable FP16", value=bool(config.detect.fp16))
         device = st.text_input("Device", value=config.detect.device or "", help="Set to GPU index (e.g. 0) or 'cpu'. Leave blank for default.")
@@ -143,6 +215,9 @@ def main() -> None:
         "min_conf": float(min_conf),
         "min_box_area": int(min_box_area),
         "imgsz": int(imgsz),
+        "iou": float(iou),
+        "agnostic_nms": bool(agnostic_nms),
+        "max_det": int(max_det),
         "batch_size": int(batch_size),
         "fp16": bool(fp16),
         "device": device.strip() or None,

@@ -29,7 +29,9 @@ class YoloDetector:
         imgsz: int = 960,
         device: Optional[str] = None,
         fp16: bool = False,
-        max_det: int = 200,
+        max_det: int = 1000,
+        iou: float = 0.45,
+        agnostic_nms: bool = False,
     ):
         from ultralytics import YOLO
         self.model = YOLO(model_path)
@@ -43,6 +45,22 @@ class YoloDetector:
         self.device = device
         self.fp16 = bool(fp16)
         self.max_det = int(max(1, max_det))
+        self.iou = float(iou)
+        self.agnostic_nms = bool(agnostic_nms)
+
+        try:
+            overrides = self.model.overrides  # type: ignore[attr-defined]
+        except AttributeError:
+            overrides = None
+        if isinstance(overrides, dict):
+            overrides.update(
+                {
+                    "conf": self.min_conf,
+                    "iou": self.iou,
+                    "agnostic_nms": self.agnostic_nms,
+                    "max_det": self.max_det,
+                }
+            )
 
     def _filter_one(self, boxes, confs, clses) -> List[Detection]:
         dets: List[Detection] = []
@@ -77,6 +95,8 @@ class YoloDetector:
             half=self.fp16,
             verbose=False,
             max_det=self.max_det,
+            iou=self.iou,
+            agnostic_nms=self.agnostic_nms,
         )
         outputs: List[List[Detection]] = []
         for res in res_list:

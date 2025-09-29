@@ -265,12 +265,20 @@ def analyze_video(
         device=cfg_local.detect.device,
         fp16=cfg_local.detect.fp16,
         max_det=cfg_local.detect.max_det,
+        iou=cfg_local.detect.iou,
+        agnostic_nms=cfg_local.detect.agnostic_nms,
     )
     if hasattr(det, "min_conf"):
         det.min_conf = cfg_local.detect.min_conf
         det.min_box_area = cfg_local.detect.min_box_area
         if roi is not None:
             det.roi = roi
+        if hasattr(det, "iou"):
+            det.iou = cfg_local.detect.iou
+        if hasattr(det, "agnostic_nms"):
+            det.agnostic_nms = cfg_local.detect.agnostic_nms
+        if hasattr(det, "max_det"):
+            det.max_det = cfg_local.detect.max_det
 
     tracker = build_tracker(cfg_local.track.backend, max_age=cfg_local.track.max_age)
     action_heuristics = build_action_heuristics()
