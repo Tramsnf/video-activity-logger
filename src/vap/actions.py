@@ -19,8 +19,8 @@ class CarryState:
 
 
 class ActionHeuristics:
-    """Simple GRAB_SKID / PLACE_SKID heuristic based on truck↔pallet proximity
-    and truck WAIT state around the moment of engagement/release.
+    """Simple GRAB_SKID / PLACE_SKID heuristic based on forklift↔pallet proximity
+    and forklift WAIT state around the moment of engagement/release.
     """
 
     def __init__(self):
@@ -41,10 +41,10 @@ class ActionHeuristics:
 
         # Build simple lookups
         vehicle_classes = {"truck", "forklift"}
-        trucks = [t for t in tracks if getattr(t, "cls_name", "") in vehicle_classes]
+        forklift = [t for t in tracks if getattr(t, "cls_name", "") in vehicle_classes]
         pallets = [t for t in tracks if getattr(t, "cls_name", "") == "pallet"]
 
-        if not trucks:
+        if not forklift:
             return events
 
         attach_px = float(getattr(thresholds, "action_attach_dist_m", 1.0)) * pixels_per_meter
@@ -53,10 +53,10 @@ class ActionHeuristics:
         detach_frames = int(getattr(thresholds, "action_detach_frames", 5))
 
         # For each truck, check nearest pallet and proximity streaks
-        for fk in trucks:
-            cls = getattr(fk, "cls_name", "truck")
+        for fk in forklift:
+            cls = getattr(fk, "cls_name", "forklift")
             aid = f"{cls}_{fk.track_id}"
-            actor_type = cls if cls in vehicle_classes else "truck"
+            actor_type = cls if cls in vehicle_classes else "forklift"
             st = self.state.get(aid, CarryState())
 
             # Find nearest pallet
@@ -114,27 +114,34 @@ class ActionHeuristics:
                 })
 
             # Detach (PLACE_SKID)
-            if st.carrying and st.far_count >= detach_frames and curr_mode == "WAIT":
-                st.carrying = False
-                attrs = {"pallet_id": st.pallet_id}
-                if driver_id:
-                    attrs["occupant_id"] = driver_id
-                    attrs["role"] = "driver"
-                events.append({
-                    "video_id": video_id,
-                    "actor_id": aid,
-                    "actor_type": actor_type,
-                    "activity": "PLACE_SKID",
-                    "start_time_s": frame_idx / fps,
-                    "end_time_s": frame_idx / fps,
-                    "duration_s": 0.0,
-                    "confidence": 0.6,
-                    "source_camera": source_camera,
-                    "attributes": attrs,
-                })
-                st.pallet_id = None
-                st.candidate_id = None
-                st.far_count = 0
+            detach_ready = st.carrying and st.far_count >= detach_frames and curr_mode == "WAIT"
+            if detach_ready:
+                dist_clear = True
+                if nearest_id is not None:
+                    dist_clear = nearest_dist >= detach_px
+                if dist_clear:
+                    st.carrying = False
+                    attrs = {"pallet_id": st.pallet_id}
+                    if driver_id:
+                        attrs["occupant_id"] = driver_id
+                        attrs["role"] = "driver"
+                    events.append({
+                        "video_id": video_id,
+                        "actor_id": aid,
+                        "actor_type": actor_type,
+                        "activity": "PLACE_SKID",
+                        "start_time_s": frame_idx / fps,
+                        "end_time_s": frame_idx / fps,
+                        "duration_s": 0.0,
+                        "confidence": 0.6,
+                        "source_camera": source_camera,
+                        "attributes": attrs,
+                    })
+                    st.pallet_id = None
+                    st.candidate_id = None
+                    st.far_count = 0
+            if st.carrying and st.candidate_id is None:
+                st.candidate_id = st.pallet_id
 
             self.state[aid] = st
 

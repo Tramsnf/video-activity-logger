@@ -7,7 +7,7 @@ zones_path: configs/zones.yaml         # optional: zone polygons for zone events
 detect:
   backend: yolo
   model_path: best.pt             # default weights (select different ones in the UI drop-down)
-  classes: [person, truck, forklift, pallet]               # COCO doesn't include 'truck' or 'pallet' by default
+  classes: [person, forklift, truck, pallet]
   min_conf: 0.25
   min_box_area: 100
   imgsz: 640
@@ -38,3 +38,7 @@ thresholds:
   action_detach_dist_m: 1.5
   action_attach_frames: 5
   action_detach_frames: 5
+  auto_calibrate_pixels_per_meter: true
+  calibration_actor: person
+  calibration_actor_height_m: 1.75
+  calibration_min_samples: 25

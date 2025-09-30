@@ -306,6 +306,14 @@ def analyze_video(
     fl_speed_stop = getattr(thr, "fl_speed_stop", getattr(thr, "speed_stop", 0.05))
     hu_speed_walk = getattr(thr, "hu_speed_walk", fl_speed_drive)
     hu_speed_wait = getattr(thr, "hu_speed_wait", fl_speed_stop)
+    base_ppm = max(1e-3, float(getattr(thr, "pixels_per_meter", 90.0)))
+    auto_calibrate_ppm = bool(getattr(thr, "auto_calibrate_pixels_per_meter", False))
+    calibration_actor = str(getattr(thr, "calibration_actor", "person")).lower()
+    calibration_height_m = max(0.1, float(getattr(thr, "calibration_actor_height_m", 1.75)))
+    calibration_min_samples = max(5, int(getattr(thr, "calibration_min_samples", 20)))
+    calibration_sum = 0.0
+    calibration_count = 0
+    calibrated_ppm: Optional[float] = None
     pending_frames: List[tuple[int, np.ndarray, bool]] = []
     detection_frames: List[tuple[int, np.ndarray]] = []
     video_writer = None
@@ -415,7 +423,7 @@ def analyze_video(
         frame: np.ndarray,
         detections: Optional[List[Detection]],
     ) -> None:
-        nonlocal latest_idx, frame_shape
+        nonlocal latest_idx, frame_shape, calibration_sum, calibration_count, calibrated_ppm
         latest_idx = frame_idx
         if frame_shape is None:
             frame_shape = frame.shape[:2]
@@ -429,6 +437,28 @@ def analyze_video(
             tracks = _predict_tracks(frame_idx, frame_shape)
             det_count = 0
 
+        if auto_calibrate_ppm and calibrated_ppm is None and tracks:
+            for tr in tracks:
+                cls_name = getattr(tr, "cls_name", "")
+                if not cls_name:
+                    continue
+                if cls_name.lower() != calibration_actor:
+                    continue
+                x1, y1, x2, y2 = tr.xyxy
+                height_px = max(1.0, float(y2) - float(y1))
+                calibration_sum += height_px
+                calibration_count += 1
+            if calibration_count >= calibration_min_samples:
+                avg_height_px = calibration_sum / calibration_count
+                candidate_ppm = avg_height_px / calibration_height_m
+                if 5.0 <= candidate_ppm <= 5000.0:
+                    calibrated_ppm = candidate_ppm
+                else:
+                    calibration_sum = 0.0
+                    calibration_count = 0
+
+        active_ppm = calibrated_ppm or base_ppm
+
         frame_stats.append(
             FrameStat(frame_idx=frame_idx, num_detections=det_count, num_tracks=len(tracks))
         )
@@ -438,7 +468,7 @@ def analyze_video(
             tracks=tracks,
             frame_idx=frame_idx,
             fps=fps,
-            pixels_per_meter=cfg_local.thresholds.pixels_per_meter,
+            pixels_per_meter=active_ppm,
             fl_speed_drive=fl_speed_drive,
             fl_speed_stop=fl_speed_stop,
             hu_speed_walk=hu_speed_walk,
@@ -455,7 +485,7 @@ def analyze_video(
             tracks=tracks,
             frame_idx=frame_idx,
             fps=fps,
-            pixels_per_meter=cfg_local.thresholds.pixels_per_meter,
+            pixels_per_meter=active_ppm,
             thresholds=cfg_local.thresholds,
             source_camera=cfg_local.source_camera,
             video_id=cfg_local.video_id,

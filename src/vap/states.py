@@ -18,6 +18,7 @@ class ActorState:
     pending: List[str] = field(default_factory=list)
     occupant_id: str | None = None
     last_occupant_id: str | None = None
+    occupant_missing: int = 0
 
 def centroid(xyxy):
     x1,y1,x2,y2 = xyxy
@@ -38,7 +39,7 @@ def actor_type_from_class(cls_name: str) -> str:
     return name or "object"
 
 
-def build_occupancy_maps(tracks):
+def build_occupancy_maps(tracks, actors: Dict[str, ActorState]):
     occupants_by_vehicle: Dict[str, str] = {}
     vehicle_by_person: Dict[str, str] = {}
 
@@ -56,15 +57,31 @@ def build_occupancy_maps(tracks):
     for vt_id, vtrk in vehicles:
         vx1, vy1, vx2, vy2 = vtrk.xyxy
         vcx, vcy = centroid(vtrk.xyxy)
+        vw = max(1.0, float(vx2) - float(vx1))
+        vh = max(1.0, float(vy2) - float(vy1))
+        search_radius = max(20.0, max(vw, vh) * 0.8)
+        prev_actor = actors.get(vt_id)
+        preferred_id = None
+        if prev_actor is not None:
+            preferred_id = prev_actor.occupant_id or prev_actor.last_occupant_id
         best_tid = None
-        best_dist = float("inf")
+        best_score = (float("inf"), float("inf"))
         for pt_id, ptrk in persons:
             px, py = centroid(ptrk.xyxy)
-            if vx1 <= px <= vx2 and vy1 <= py <= vy2:
-                dist = math.hypot(vcx - px, vcy - py)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_tid = pt_id
+            dist = math.hypot(vcx - px, vcy - py)
+            inside = vx1 <= px <= vx2 and vy1 <= py <= vy2
+            near = inside or dist <= search_radius
+            if not near:
+                continue
+            priority = 1
+            if inside:
+                priority = 0
+            if preferred_id and pt_id == preferred_id:
+                priority = -1
+            score = (priority, dist)
+            if score < best_score:
+                best_score = score
+                best_tid = pt_id
         if best_tid is not None:
             occupants_by_vehicle[vt_id] = best_tid
             vehicle_by_person[best_tid] = vt_id
@@ -86,7 +103,7 @@ def update_state_machine(
     video_id: str,
 ) -> List[Dict[str, Any]]:
     events = []
-    occupants_by_vehicle, vehicle_by_person = build_occupancy_maps(tracks)
+    occupants_by_vehicle, vehicle_by_person = build_occupancy_maps(tracks, actors)
     for trk in tracks:
         tid = f"{trk.cls_name}_{trk.track_id}"
         actor_type = actor_type_from_class(getattr(trk, "cls_name", ""))
@@ -118,6 +135,9 @@ def update_state_machine(
         a.occupant_id = occupant_id
         if a.occupant_id:
             a.last_occupant_id = a.occupant_id
+            a.occupant_missing = 0
+        else:
+            a.occupant_missing = min(a.occupant_missing + 1, 60)
         if a.actor_type in ("truck", "forklift"):
             drive = s > fl_speed_drive
             wait  = s <= fl_speed_stop

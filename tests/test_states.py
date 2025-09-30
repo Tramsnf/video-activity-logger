@@ -2,7 +2,7 @@ from __future__ import annotations
 import unittest
 from typing import List
 
-from vap.states import update_state_machine
+from vap.states import update_state_machine, build_occupancy_maps, ActorState
 from vap.track import Track
 
 
@@ -56,6 +56,22 @@ class TestStates(unittest.TestCase):
     def test_human_uses_human_thresholds(self):
         s = self.run_sequence(cls_name="person", speed_mps=0.3, fps=30.0, ppm=90.0, debounce=3)
         self.assertEqual(s, "WAIT")
+
+    def test_previous_occupant_preferred(self):
+        actors = {
+            "forklift_1": ActorState(
+                actor_id="forklift_1",
+                actor_type="forklift",
+                occupant_id="person_1",
+                last_occupant_id="person_1",
+            )
+        }
+        forklift = Track(track_id=1, cls_name="forklift", xyxy=(0.0, 0.0, 100.0, 100.0))
+        prev_driver = Track(track_id=1, cls_name="person", xyxy=(110.0, 40.0, 130.0, 60.0))
+        new_person = Track(track_id=2, cls_name="person", xyxy=(10.0, 10.0, 20.0, 30.0))
+        occ, rev = build_occupancy_maps([forklift, prev_driver, new_person], actors)
+        self.assertEqual(occ.get("forklift_1"), "person_1")
+        self.assertEqual(rev.get("person_1"), "forklift_1")
 
 
 if __name__ == "__main__":

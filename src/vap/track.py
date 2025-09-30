@@ -85,6 +85,8 @@ class _ByteTrackWrapper:
     def __init__(self, iou_thresh: float = 0.3, max_age: int = 30):
         self.fallback = SimpleIOUTracker(iou_thresh=iou_thresh, max_age=max_age)
         self.use_fallback = True
+        self.track_meta: Dict[int, Dict[str, Any]] = {}
+        self.iou_match_thresh = max(0.05, min(0.7, iou_thresh))
         try:
             from supervision.tracker.byte_tracker import BYTETracker  # type: ignore
             try:
@@ -102,31 +104,73 @@ class _ByteTrackWrapper:
             return self.fallback.update(detections)
         try:
             import numpy as np
+
             xyxy = np.array([d.xyxy for d in detections], dtype=np.float32) if detections else np.zeros((0, 4), np.float32)
-            conf = np.array([d.conf for d in detections], dtype=np.float32) if detections else np.zeros((0,), np.float32)
-            cls_ids = np.array([0 for _ in detections], dtype=int)
-            dets = self._Detections(xyxy=xyxy, confidence=conf, class_id=cls_ids)
+            conf = np.array([getattr(d, "conf", 0.0) for d in detections], dtype=np.float32) if detections else np.zeros((0,), np.float32)
+            dets = self._Detections(
+                xyxy=xyxy,
+                confidence=conf,
+                class_id=np.zeros((len(detections),), dtype=int) if detections else np.zeros((0,), dtype=int),
+            )
             tracks = self.bt.update_with_detections(dets)
+
             outputs: List[Track] = []
+            used_meta: Dict[int, Dict[str, Any]] = {}
+
+            det_boxes = [tuple(d.xyxy) for d in detections]
+            det_classes = [getattr(d, "cls_name", "object") for d in detections]
+
             for tr in tracks:
                 tid = int(getattr(tr, "id", getattr(tr, "track_id", 0)))
                 box = getattr(tr, "bbox", getattr(tr, "xyxy", None))
                 if box is None:
                     continue
                 x1, y1, x2, y2 = [float(v) for v in box]
-                outputs.append(Track(track_id=tid, cls_name="object", xyxy=(x1, y1, x2, y2)))
+                cls_name = self._match_class((x1, y1, x2, y2), det_boxes, det_classes, tid)
+                used_meta[tid] = {"cls_name": cls_name}
+                outputs.append(Track(track_id=tid, cls_name=cls_name, xyxy=(x1, y1, x2, y2)))
+
+            self._prune_meta(used_meta)
+
             if not outputs:
+                # Fall back to IoU tracker when ByteTrack yields nothing
                 return self.fallback.update(detections)
             return outputs
         except Exception:
             self.use_fallback = True
             return self.fallback.update(detections)
 
+    def _match_class(
+        self,
+        track_box: Tuple[float, float, float, float],
+        det_boxes: List[Tuple[float, float, float, float]],
+        det_classes: List[str],
+        track_id: int,
+    ) -> str:
+        best_cls = None
+        best_iou = 0.0
+        for idx, box in enumerate(det_boxes):
+            iou_val = iou(track_box, box)
+            if iou_val > best_iou and iou_val >= self.iou_match_thresh:
+                best_iou = iou_val
+                best_cls = det_classes[idx]
+        if best_cls is None:
+            prev = self.track_meta.get(track_id)
+            if prev:
+                return prev.get("cls_name", "object")
+            return "object"
+        return best_cls
+
+    def _prune_meta(self, fresh_meta: Dict[int, Dict[str, Any]]) -> None:
+        self.track_meta = fresh_meta
+
 
 class _OCSortWrapper:
     def __init__(self, iou_thresh: float = 0.3, max_age: int = 30):
         self.fallback = SimpleIOUTracker(iou_thresh=iou_thresh, max_age=max_age)
         self.use_fallback = True
+        self.track_meta: Dict[int, Dict[str, Any]] = {}
+        self.iou_match_thresh = max(0.05, min(0.7, iou_thresh))
         try:
             from ocsort.ocsort import OCSort  # type: ignore
             self.oc = OCSort()
@@ -146,15 +190,46 @@ class _OCSortWrapper:
             dets = np.array(dets, dtype=np.float32) if dets else np.zeros((0, 5), np.float32)
             tracks = self.oc.update(dets)
             outputs: List[Track] = []
+            det_boxes = [tuple(d.xyxy) for d in detections]
+            det_classes = [getattr(d, "cls_name", "object") for d in detections]
+            used_meta: Dict[int, Dict[str, Any]] = {}
             for t in tracks:
                 x1, y1, x2, y2, tid = t[:5]
-                outputs.append(Track(track_id=int(tid), cls_name="object", xyxy=(float(x1), float(y1), float(x2), float(y2))))
+                bbox = (float(x1), float(y1), float(x2), float(y2))
+                cls_name = self._match_class(bbox, det_boxes, det_classes, int(tid))
+                used_meta[int(tid)] = {"cls_name": cls_name}
+                outputs.append(Track(track_id=int(tid), cls_name=cls_name, xyxy=bbox))
+            self._prune_meta(used_meta)
             if not outputs:
                 return self.fallback.update(detections)
             return outputs
         except Exception:
             self.use_fallback = True
             return self.fallback.update(detections)
+
+    def _match_class(
+        self,
+        track_box: Tuple[float, float, float, float],
+        det_boxes: List[Tuple[float, float, float, float]],
+        det_classes: List[str],
+        track_id: int,
+    ) -> str:
+        best_cls = None
+        best_iou = 0.0
+        for idx, box in enumerate(det_boxes):
+            iou_val = iou(track_box, box)
+            if iou_val > best_iou and iou_val >= self.iou_match_thresh:
+                best_iou = iou_val
+                best_cls = det_classes[idx]
+        if best_cls is None:
+            prev = self.track_meta.get(track_id)
+            if prev:
+                return prev.get("cls_name", "object")
+            return "object"
+        return best_cls
+
+    def _prune_meta(self, fresh_meta: Dict[int, Dict[str, Any]]) -> None:
+        self.track_meta = fresh_meta
 
 
 def build_tracker(backend: str, **kwargs: Any):

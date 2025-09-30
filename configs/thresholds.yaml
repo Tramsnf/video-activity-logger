@@ -3,3 +3,7 @@ fps_target: 30
 speed_drive: 0.2
 speed_stop: 0.05
 debounce_frames: 3
+auto_calibrate_pixels_per_meter: false
+calibration_actor: person
+calibration_actor_height_m: 1.75
+calibration_min_samples: 25
