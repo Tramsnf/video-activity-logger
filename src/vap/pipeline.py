@@ -121,6 +121,50 @@ def _frame_iterator(video_path: str, prefetch: int) -> Iterator[Iterator[Tuple[i
         prefetcher.close()
 
 
+class _CameraMotionEstimator:
+    """Estimate global translation between consecutive frames."""
+
+    def __init__(self, max_corners: int = 200, quality_level: float = 0.01, min_distance: int = 7):
+        self.prev_gray: Optional[np.ndarray] = None
+        self.max_corners = max_corners
+        self.quality_level = quality_level
+        self.min_distance = min_distance
+
+    def estimate(self, frame: np.ndarray) -> Tuple[float, float]:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if self.prev_gray is None:
+            self.prev_gray = gray
+            return (0.0, 0.0)
+
+        prev_pts = cv2.goodFeaturesToTrack(
+            self.prev_gray,
+            maxCorners=self.max_corners,
+            qualityLevel=self.quality_level,
+            minDistance=self.min_distance,
+            blockSize=3,
+        )
+        if prev_pts is None or len(prev_pts) < 8:
+            self.prev_gray = gray
+            return (0.0, 0.0)
+
+        next_pts, status, _ = cv2.calcOpticalFlowPyrLK(self.prev_gray, gray, prev_pts, None)
+        self.prev_gray = gray
+        if next_pts is None or status is None:
+            return (0.0, 0.0)
+
+        valid_prev = prev_pts[status.flatten() == 1]
+        valid_next = next_pts[status.flatten() == 1]
+        if len(valid_prev) < 8:
+            return (0.0, 0.0)
+
+        deltas = valid_next - valid_prev
+        median_dx = float(np.median(deltas[:, 0]))
+        median_dy = float(np.median(deltas[:, 1]))
+        if not np.isfinite(median_dx) or not np.isfinite(median_dy):
+            return (0.0, 0.0)
+        return (median_dx, median_dy)
+
+
 def _resolve_device(device: Optional[str]) -> Optional[str]:
     """Return a valid device string for Ultralytics/torch."""
 
@@ -190,6 +234,31 @@ def _apply_detect_overrides(cfg: PipelineConfig, overrides: Optional[Dict[str, A
         if hasattr(cfg_copy.detect, key):
             setattr(cfg_copy.detect, key, value)
     return cfg_copy
+
+
+def _extract_feature(frame: np.ndarray, box: Tuple[float, float, float, float]) -> Optional[np.ndarray]:
+    height, width = frame.shape[:2]
+    x1, y1, x2, y2 = box
+    x1_i = int(max(0, min(width - 1, x1)))
+    y1_i = int(max(0, min(height - 1, y1)))
+    x2_i = int(max(0, min(width, x2)))
+    y2_i = int(max(0, min(height, y2)))
+    if x2_i <= x1_i + 1 or y2_i <= y1_i + 1:
+        return None
+    crop = frame[y1_i:y2_i, x1_i:x2_i]
+    if crop.size == 0:
+        return None
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    hist = cv2.calcHist([hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
+    if hist is None:
+        return None
+    hist = cv2.normalize(hist, None)
+    return hist.flatten().astype(np.float32)
+
+
+def _annotate_detections_with_features(frame: np.ndarray, detections: List[Detection]) -> None:
+    for det in detections:
+        det.feature = _extract_feature(frame, det.xyxy)
 
 
 def _color_for_track(track_id: int) -> tuple[int, int, int]:
@@ -280,7 +349,13 @@ def analyze_video(
         if hasattr(det, "max_det"):
             det.max_det = cfg_local.detect.max_det
 
-    tracker = build_tracker(cfg_local.track.backend, max_age=cfg_local.track.max_age)
+    tracker = build_tracker(
+        cfg_local.track.backend,
+        max_age=cfg_local.track.max_age,
+        iou_thresh=getattr(cfg_local.track, "iou_thresh", 0.3),
+        appearance_lambda=getattr(cfg_local.track, "appearance_lambda", 0.6),
+        feature_momentum=getattr(cfg_local.track, "feature_momentum", 0.9),
+    )
     action_heuristics = build_action_heuristics()
 
     zone_eventer = None
@@ -322,6 +397,7 @@ def analyze_video(
     frame_shape: Optional[tuple[int, int]] = None
     max_track_age = max(1, int(getattr(cfg_local.track, "max_age", 30)))
     track_state: Dict[int, Dict[str, Any]] = {}
+    motion_estimator = _CameraMotionEstimator()
 
     def _update_track_state(tracks: List[Track], frame_idx: int) -> None:
         observed: set[int] = set()
@@ -428,7 +504,10 @@ def analyze_video(
         if frame_shape is None:
             frame_shape = frame.shape[:2]
 
+        cam_motion = motion_estimator.estimate(frame)
+
         if detections is not None:
+            _annotate_detections_with_features(frame, detections)
             tracks = tracker.update(detections)
             _update_track_state(tracks, frame_idx)
             det_count = len(detections)
@@ -476,6 +555,7 @@ def analyze_video(
             debounce_frames=cfg_local.thresholds.debounce_frames,
             source_camera=cfg_local.source_camera,
             video_id=cfg_local.video_id,
+            camera_motion=cam_motion,
         )
         if ev:
             events.extend(ev)

@@ -101,9 +101,11 @@ def update_state_machine(
     debounce_frames: int,
     source_camera: str,
     video_id: str,
+    camera_motion: Tuple[float, float] | None = None,
 ) -> List[Dict[str, Any]]:
     events = []
     occupants_by_vehicle, vehicle_by_person = build_occupancy_maps(tracks, actors)
+    cam_dx, cam_dy = camera_motion if camera_motion is not None else (0.0, 0.0)
     for trk in tracks:
         tid = f"{trk.cls_name}_{trk.track_id}"
         actor_type = actor_type_from_class(getattr(trk, "cls_name", ""))
@@ -119,8 +121,8 @@ def update_state_machine(
         # speed calc
         speed_mps = 0.0
         if a.last_pos is not None:
-            dx = (cx - a.last_pos[0]) / pixels_per_meter
-            dy = (cy - a.last_pos[1]) / pixels_per_meter
+            dx = (cx - a.last_pos[0] - cam_dx) / pixels_per_meter
+            dy = (cy - a.last_pos[1] - cam_dy) / pixels_per_meter
             speed_mps = math.hypot(dx, dy) * fps
         is_occupant_person = tid in vehicle_by_person
         if is_occupant_person:

@@ -22,6 +22,9 @@ class DetectConfig(BaseModel):
 class TrackConfig(BaseModel):
     backend: str = Field(default="bytetrack")
     max_age: int = 30
+    iou_thresh: float = 0.3
+    appearance_lambda: float = 0.6
+    feature_momentum: float = 0.9
 
 class Thresholds(BaseModel):
     pixels_per_meter: float = 90.0

@@ -18,8 +18,11 @@ detect:
   #device: 8                      # set to GPU id or 'cpu'
   # fp16: true
 track:
-  backend: bytetrack
+  backend: botsort
   max_age: 30
+  iou_thresh: 0.35
+  appearance_lambda: 0.5
+  feature_momentum: 0.85
 thresholds:
   pixels_per_meter: 90.0
   fps_target: 30

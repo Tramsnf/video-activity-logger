@@ -22,6 +22,7 @@ streamlit run src/vap/review/app.py
 
 ## New Features (Robust Pipeline)
 - Trackers: configurable `iou` (default), optional `bytetrack` and `ocsort` backends with graceful fallback.
+- BotSORT-inspired tracker with appearance embeddings for long-lived forklift IDs.
 - Per-actor thresholds: forklift vs human speeds and debounced transitions.
 - State cleanup: merge small gaps and drop too-short intervals.
 - Actions: heuristic GRAB_SKID/PLACE_SKID; configurable distance/frame parameters.

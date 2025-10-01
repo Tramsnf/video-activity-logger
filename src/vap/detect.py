@@ -8,6 +8,7 @@ class Detection:
     xyxy: Tuple[float,float,float,float]
     conf: float
     cls_name: str
+    feature: Optional[np.ndarray] = None
 
 class MockDetector:
     def __init__(self, classes: List[str]):

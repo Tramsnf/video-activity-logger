@@ -1,6 +1,6 @@
 from __future__ import annotations
 import unittest
-from typing import List
+from typing import List, Dict
 
 from vap.states import update_state_machine, build_occupancy_maps, ActorState
 from vap.track import Track
@@ -38,6 +38,7 @@ class TestStates(unittest.TestCase):
                 debounce_frames=debounce,
                 source_camera="cam",
                 video_id="vid",
+                camera_motion=(0.0, 0.0),
             )
             # ignore events; we want the current state latched after debounce
             _ = ev
@@ -72,6 +73,36 @@ class TestStates(unittest.TestCase):
         occ, rev = build_occupancy_maps([forklift, prev_driver, new_person], actors)
         self.assertEqual(occ.get("forklift_1"), "person_1")
         self.assertEqual(rev.get("person_1"), "forklift_1")
+
+    def test_camera_motion_suppression(self):
+        actors: Dict[str, ActorState] = {}
+        ppm = 90.0
+        debounce = 3
+        fps = 30.0
+        # Simulate object stationary but camera moving +5 pixels horizontally each frame
+        tracks = [Track(track_id=1, cls_name="forklift", xyxy=(0.0, 0.0, 2.0, 2.0))]
+        for i in range(6):
+            # Shift bounding box by camera motion but treat as same object
+            shift = 5.0 * (i + 1)
+            trk = Track(track_id=1, cls_name="forklift", xyxy=(shift, 0.0, shift + 2.0, 2.0))
+            events = update_state_machine(
+                actors=actors,
+                tracks=[trk],
+                frame_idx=i,
+                fps=fps,
+                pixels_per_meter=ppm,
+                fl_speed_drive=0.20,
+                fl_speed_stop=0.05,
+                hu_speed_walk=0.50,
+                hu_speed_wait=0.08,
+                debounce_frames=debounce,
+                source_camera="cam",
+                video_id="vid",
+                camera_motion=(5.0, 0.0),
+            )
+            _ = events
+        state = actors.get("forklift_1").state if actors else None
+        self.assertEqual(state, "WAIT")
 
 
 if __name__ == "__main__":

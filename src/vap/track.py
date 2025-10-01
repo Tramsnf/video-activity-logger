@@ -81,6 +81,128 @@ class SimpleIOUTracker:
                 del self.tracks[tid]
         return outputs
 
+
+class BotSortTracker:
+    """IOU + appearance fusion inspired by BotSORT."""
+
+    def __init__(
+        self,
+        iou_thresh: float = 0.3,
+        max_age: int = 30,
+        appearance_lambda: float = 0.6,
+        feature_momentum: float = 0.9,
+    ) -> None:
+        self.iou_thresh = max(0.0, min(1.0, iou_thresh))
+        self.max_age = max(1, max_age)
+        self.appearance_lambda = max(0.0, min(1.0, appearance_lambda))
+        self.feature_momentum = max(0.0, min(1.0, feature_momentum))
+        self.tracks: Dict[int, Dict[str, Any]] = {}
+        self.next_id = 1
+
+    @staticmethod
+    def _cosine_similarity(vec_a, vec_b) -> float:
+        if vec_a is None or vec_b is None:
+            return 0.0
+        if vec_a.size == 0 or vec_b.size == 0:
+            return 0.0
+        a = vec_a.astype(np.float32)
+        b = vec_b.astype(np.float32)
+        denom = np.linalg.norm(a) * np.linalg.norm(b)
+        if denom <= 1e-6:
+            return 0.0
+        return float(np.clip(np.dot(a, b) / denom, -1.0, 1.0))
+
+    def _blend_feature(self, current, incoming):
+        if incoming is None:
+            return current
+        if current is None:
+            current = incoming
+        else:
+            alpha = self.feature_momentum
+            current = alpha * current + (1.0 - alpha) * incoming
+        norm = np.linalg.norm(current)
+        if norm > 1e-6:
+            current = current / norm
+        return current.astype(np.float32)
+
+    def update(self, detections) -> List[Track]:
+        for tid in list(self.tracks.keys()):
+            self.tracks[tid]["age"] += 1
+
+        outputs: List[Track] = []
+        dets_by_cls: Dict[str, List[Any]] = {}
+        for det in detections:
+            dets_by_cls.setdefault(det.cls_name, []).append(det)
+
+        for cls_name, dets in dets_by_cls.items():
+            active_ids = [tid for tid, tr in self.tracks.items() if tr["cls_name"] == cls_name]
+            active_boxes = [self.tracks[tid]["xyxy"] for tid in active_ids]
+            active_feats = [self.tracks[tid].get("feature") for tid in active_ids]
+            det_boxes = [tuple(d.xyxy) for d in dets]
+            det_feats = [getattr(d, "feature", None) for d in dets]
+
+            if active_boxes:
+                cost = np.ones((len(active_boxes), len(det_boxes)), dtype=np.float32)
+                for i, tb in enumerate(active_boxes):
+                    for j, db in enumerate(det_boxes):
+                        iou_val = iou(tb, db)
+                        sim = self._cosine_similarity(active_feats[i], det_feats[j])
+                        score = 0.0
+                        if iou_val > 0.0:
+                            score += self.appearance_lambda * iou_val
+                        if sim > 0.0:
+                            score += (1.0 - self.appearance_lambda) * sim
+                        score = max(0.0, min(1.0, score))
+                        cost[i, j] = 1.0 - score if score > 0.0 else 1.0
+                r_ind, c_ind = linear_sum_assignment(cost)
+                matched_dets = set()
+                for ri, cj in zip(r_ind, c_ind):
+                    tid = active_ids[ri]
+                    matched_iou = iou(active_boxes[ri], det_boxes[cj])
+                    sim = self._cosine_similarity(active_feats[ri], det_feats[cj])
+                    if matched_iou < self.iou_thresh and sim < 0.5:
+                        continue
+                    if cost[ri, cj] >= 0.95:
+                        continue
+                    feature = self._blend_feature(self.tracks[tid].get("feature"), det_feats[cj])
+                    self.tracks[tid].update({
+                        "xyxy": det_boxes[cj],
+                        "age": 0,
+                        "feature": feature,
+                    })
+                    matched_dets.add(cj)
+                    outputs.append(Track(track_id=tid, cls_name=cls_name, xyxy=det_boxes[cj]))
+
+                for j, db in enumerate(det_boxes):
+                    if j in matched_dets:
+                        continue
+                    tid = self.next_id
+                    self.next_id += 1
+                    feat = det_feats[j]
+                    if feat is not None:
+                        norm = np.linalg.norm(feat)
+                        if norm > 1e-6:
+                            feat = (feat / norm).astype(np.float32)
+                    self.tracks[tid] = {"cls_name": cls_name, "xyxy": db, "age": 0, "feature": feat}
+                    outputs.append(Track(track_id=tid, cls_name=cls_name, xyxy=db))
+            else:
+                for j, db in enumerate(det_boxes):
+                    tid = self.next_id
+                    self.next_id += 1
+                    feat = det_feats[j]
+                    if feat is not None:
+                        norm = np.linalg.norm(feat)
+                        if norm > 1e-6:
+                            feat = (feat / norm).astype(np.float32)
+                    self.tracks[tid] = {"cls_name": cls_name, "xyxy": db, "age": 0, "feature": feat}
+                    outputs.append(Track(track_id=tid, cls_name=cls_name, xyxy=db))
+
+        for tid in list(self.tracks.keys()):
+            if self.tracks[tid]["age"] > self.max_age:
+                del self.tracks[tid]
+        return outputs
+
+
 class _ByteTrackWrapper:
     def __init__(self, iou_thresh: float = 0.3, max_age: int = 30):
         self.fallback = SimpleIOUTracker(iou_thresh=iou_thresh, max_age=max_age)
@@ -234,6 +356,13 @@ class _OCSortWrapper:
 
 def build_tracker(backend: str, **kwargs: Any):
     backend = (backend or "iou").lower()
+    if backend == "botsort":
+        return BotSortTracker(
+            iou_thresh=kwargs.get("iou_thresh", 0.3),
+            max_age=kwargs.get("max_age", 30),
+            appearance_lambda=kwargs.get("appearance_lambda", 0.6),
+            feature_momentum=kwargs.get("feature_momentum", 0.9),
+        )
     if backend == "bytetrack":
         return _ByteTrackWrapper()
     if backend == "ocsort":
