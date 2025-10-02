@@ -157,7 +157,9 @@ class _CameraMotionEstimator:
         if len(valid_prev) < 8:
             return (0.0, 0.0)
 
-        deltas = valid_next - valid_prev
+        deltas = (valid_next - valid_prev).squeeze(1)
+        if deltas.ndim != 2 or deltas.shape[1] < 2:
+            return (0.0, 0.0)
         median_dx = float(np.median(deltas[:, 0]))
         median_dy = float(np.median(deltas[:, 1]))
         if not np.isfinite(median_dx) or not np.isfinite(median_dy):
